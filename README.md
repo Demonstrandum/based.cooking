@@ -16,10 +16,10 @@ There are no ads, trackers, cookies (unless recipes thereof) or javascript.
 ## Rules for submission
 
 - Model submission files after [example.md](example.md). Put them in `src/`.
-- Recipes should start with a title, with a single `#`, *on the first line*. No
-  empty line at the top, no trailing line at the end. The file needs to be `\n`
-  terminated in linux-fashion (if you're on linux you don't need to care, it
-  should be automatic).
+- Recipes should start with a title, the first `h1` header
+  (line starting with a single `#`) of the document becomes the title.
+  The file should to be `\n` terminated in linux-fashion
+  (if you're on linux you don't need to care, it should be automatic).
 - File names should be the name of the dish with words separated by hyphens
   (`-`). Not underscores, and definitely not spaces.
 - Recipe must be based, i.e. good traditional and substantial food. Nothing
@@ -36,8 +36,8 @@ You can (and should) add tags at the end of your recipe. The syntax is:
 ;tags: tag1 tag2 tag3
 ```
 
-The tag line should be a single line, at the end of the markdown file, preceded
-by a blank line.
+The tag line should be a single line, anywhere in the markdown file. It
+must start with exactly "`;tags: `", including the <kbd>Space</kbd> after the colon.
 
 Add between 1 and 4 tags, **prioritize existing tags**. As a general guideline,
 add the country from which the recipe originates if the recipe is representative
