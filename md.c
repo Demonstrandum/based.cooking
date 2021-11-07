@@ -1,5 +1,7 @@
 /* parse md files. */
 #include "md.h"
+#include "config.h"
+#include "based.h"
 #include <string.h>
 #include <errno.h>
 /*
@@ -13,26 +15,35 @@
  */
 #define LINE_LENGTH 400
 #define TAGS_PREFIX ";tags: "
+#define FILE_BUF_SIZE (1 << 13)  /* ~8.2KiB */
 
 struct md _parsed_md = { 0 };
+MMIOT *_mmio = NULL;
 
 struct md *
-mdparse(FILE *f)
+mdparse(char *srcdir, char *slug)
 {
+	FILE *f;
+	char src[PATH_LEN];
 	int i, tag_start, tag = 0;
 	char linbuf[LINE_LENGTH] = { '\0' };
 	size_t linlen = 0;
 	int    doclen = 0;
-	char *html = _parsed_md.html;
-	char *doc = NULL;
-	MMIOT *mmio = NULL;
+	char filebuf[FILE_BUF_SIZE];
 
 	/* important: null out old parse before reuse.
 	 * we rely on NUL-bytes being in their appropriate places.
 	 */
 	memset(&_parsed_md, 0, sizeof(_parsed_md));
 
-	/* first write raw markdown into `_parsed_md.html`. */
+	/* open source file */
+	sprintf(src, "%s/%s.md", srcdir, slug);
+	f = fopen(src, "r");
+	if (NULL == f) die("file was moved.");
+
+	strcpy(_parsed_md.slug, slug);
+
+	/* first write raw markdown into `filebuf`. */
 	while (!feof(f)) {
 		if (NULL == fgets(linbuf, sizeof(linbuf), f)) break;
 		linlen = strlen(linbuf);
@@ -54,7 +65,7 @@ mdparse(FILE *f)
 			if (0 == strncmp("# ", linbuf, 2) && _parsed_md.title[0] == '\0')
 				memcpy(_parsed_md.title, linbuf + 2, strchr(linbuf, '\n') - linbuf - 2);
 			/* seep up all left over markdown */
-			memcpy(html + doclen, linbuf, linlen);
+			memcpy(filebuf + doclen, linbuf, linlen);
 			doclen += linlen;
 		}
 		/* important: null linbuf before reuse. */
@@ -62,30 +73,44 @@ mdparse(FILE *f)
 	}
 
 	/* file finished, now parse markdown */
-	mmio = mkd_string(html, doclen, mkd_flags);
-	if (mmio == NULL) {
+	fclose(f);
+	_mmio = mkd_string(filebuf, doclen, mkd_flags);
+	if (_mmio == NULL) {
 		fprintf(stderr, "error parsing markdown file. (%d):\n", errno);
 		fprintf(stderr, "  %s\n", strerror(errno));
 		exit(1);
 	}
-	mkd_compile(mmio, mkd_flags);
-	doclen = mkd_document(mmio, &doc);
-	if (doc == NULL) {
+	mkd_compile(_mmio, mkd_flags);
+	doclen = mkd_document(_mmio, &_parsed_md.html);
+	if (_parsed_md.html == NULL) {
 		fprintf(stderr, "error generating markdown file. (%d):\n", errno);
 		fprintf(stderr, "  %s\n", strerror(errno));
 		exit(1);
 	}
 
-	/* copy html into _parsed_md.html field. */
-	memset(html, 0, HTML_LEN);
-	memcpy(html, doc, doclen);
 	/* check metadata */
 	if (_parsed_md.title[0] == '\0')
 		fprintf(stderr, "warning: file has no header title (# ...).\n");
 
-	/* cleanup, frees `doc` too. */
-	mkd_cleanup(mmio);
-
 	return &_parsed_md;
 }
 
+void
+string_from_tags(char *dst, char (*tags)[TAG_NAME_LEN])
+{
+	size_t ofs;
+	for (ofs = 0; tags[0][0] != '\0'; ++tags)
+		ofs += sprintf(dst + ofs, "%s ", tags[0]);
+	dst[ofs - 1] = '\0';
+}
+
+void
+tags_from_string(char (*dst)[TAG_NAME_LEN], char *tags)
+{
+	size_t i, j, c;
+
+	for (c = i = j = 0; tags[i] != '\0'; ++i) {
+		if (tags[i] == ' ') { ++c; j = 0; }
+		else { dst[c][j++] = tags[i]; }
+	}
+}

@@ -1,14 +1,16 @@
 #!/usr/bin/make -f
 
-# The following can be configured in config.h as well
-ARTICLES_DST ?= ./blog
-ARTICLES_SRC ?= ./src
+# The following can should configured in config.h as well
+ARTICLES_HTML ?= ./blog
+ARTICLES_MARKDOWN ?= ./src
+CACHE_FILE ?= ./.buildcache
+
 PUBLIC ?= ./data
 
 # C compilation
-CC ?= gcc
+CC ?= cc
 CLINKS ?= -lmarkdown
-CFLAGS ?= -O3 -std=c89 -Wall -Wpedantic -Wextra
+CFLAGS += -Os -std=c89 -Wall -Wpedantic -Wextra
 CFILES := $(wildcard *.c)
 OUT ?= ./bin
 BINARY ?= based
@@ -20,12 +22,12 @@ OBJS := $(patsubst %.c,$(OUT)/%.o,$(CFILES))
 help:
 	$(info make init|build|deploy|clean)
 
+# to start a fresh project
 init:
-	# to start a fresh project
-	mkdir -p $(ARTICLES_SRC) data
+	mkdir -p $(ARTICLES_MARKDOWN) $(ARTICLES_HTML) data
 
 $(OUT)/%.o: %.c
-	$(CC) $(CFLAGS) -c $< -o $@ $(CLINKS)
+	$(CC) $(CFLAGS) -c $< -o $@
 
 $(CTARGET): $(OBJS)
 	$(CC) $(CFLAGS) -o $(CTARGET) $(OBJS) $(CLINKS)
@@ -33,15 +35,18 @@ $(CTARGET): $(OBJS)
 $(OUT):
 	mkdir -p $(OUT)
 
+$(ARTICLES_HTML):
+	mkdir -p $(ARTICLES_HTML)
+
 compile: $(OUT) $(CTARGET)
 
-build: compile
-	mkdir -p $(ARTICLES_DST)
-	$(CTARGET) -s $(ARTICLES_SRC) -d $(ARTICLES_DST) -q
+build: compile $(ARTICLES_HTML)
+	mkdir -p $(ARTICLES_HTML)
+	$(CTARGET) -s $(ARTICLES_MARKDOWN) -d $(ARTICLES_HTML) -q
 
 deploy: build
-	rsync -rLtz $(BLOG_RSYNC_OPTS) $(ARTICLES_DST)/ $(PUBLIC)/ $(REMOTE)
+	rsync -rLtz $(BLOG_RSYNC_OPTS) $(ARTICLES_HTML)/ $(PUBLIC)/ $(REMOTE)
 
 clean:
-	rm -rf $(ARTICLES_DST) $(OUT)
+	rm -rf $(ARTICLES_HTML)/* $(OUT)
 
