@@ -1,6 +1,7 @@
 #ifndef _BASED_H
 #define _BASED_H
 
+#include "config.h"
 #include <errno.h>
 #include <string.h>
 #include <stdarg.h>
@@ -8,18 +9,10 @@
 #include <stdio.h>
 #include <stdbool.h>
 
-static void
-die(char *fmt, ...) {
-	va_list args;
-	va_start(args, fmt);
-	vfprintf(stderr, fmt, args);
-	va_end(args);
-
-	fputc('\n', stderr);
-	if (errno) fprintf(stderr, " -> %s\n", strerror(errno));
-
-	exit(errno || EXIT_FAILURE);
-}
+#ifndef __USE_XOPEN
+#define __USE_XOPEN
+#endif
+#include <time.h>
 
 #ifndef TAG_NAME_LEN
 #error "You need to #define the max TAG_NAME_LEN."
@@ -46,5 +39,10 @@ struct recipelist {
 	char tags[TAG_COUNT][TAG_NAME_LEN];
 	struct recipelist *next;
 };
+
+void die(char *, ...);
+char *from_rfc2822(const char *, char *, size_t, const char *);
+char *rfc3339time(char *, struct tm *);
+char *to_rfc3339(char *, const char *, const char *);
 
 #endif

@@ -10,7 +10,7 @@ PUBLIC ?= ./data
 # C compilation
 CC ?= cc
 CLINKS ?= -lmarkdown
-CFLAGS += -Os -std=c89 -Wall -Wpedantic -Wextra
+CFLAGS += -Os -std=c99 -Wall -Wpedantic -Wextra
 CFILES := $(wildcard *.c)
 OUT ?= ./bin
 BINARY ?= based

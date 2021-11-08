@@ -1,5 +1,9 @@
-#include "cache.h"
 #include "config.h"
+
+#if GIT_INTEGRATION
+/* caching is only useful with git integration */
+
+#include "cache.h"
 #include "based.h"
 #include "md.h"
 
@@ -14,19 +18,19 @@
  *	\t<title>\n
  *	\t<tags>\n
  *	\t<author-name>\n
- *	\t<ymd-posted> <ymd-edited>\n
- *	\t<rfc2822-published-date>\n
+ *	\t<rfc2822-added-date>\n
+ *	\t<rfc2822-modified-date>\n
  * Format is repeated though the file for each recipe.
  */
 
 static const char SCAN_CACHE_ENTRY[] = {
-	"%[^:]%*[^\n]%*c" /*    1 |            slug */
-	"\t%lu%*c"        /*    2 |           epoch */
-	"\t%[^\n]%*c"     /*    3 |           title */
-	"\t%[^\n]%*c"     /*    4 |            tags */
-	"\t%[^\n]%*c"     /*    5 |          author */
-	"\t%s %[^\n]%*c"  /* 6, 7 | A-date + M-date */
-	"\t%[^\n]%*c"     /*    8 |  rfc2822 A-date */
+	"%[^:]%*[^\n]%*c" /* 1 |            slug */
+	"\t%lu%*c"        /* 2 |           epoch */
+	"\t%[^\n]%*c"     /* 3 |           title */
+	"\t%[^\n]%*c"     /* 4 |            tags */
+	"\t%[^\n]%*c"     /* 5 |          author */
+	"\t%[^\n]%*c"     /* 6 | rfc-2822 A-date */
+	"\t%[^\n]%*c"     /* 7 | rfc-2822 M-date */
 };
 
 
@@ -36,8 +40,8 @@ static const char FMT_CACHE_ENTRY[] = {
 	"\t%s\n"     /*           title */
 	"\t%s\n"     /*            tags */
 	"\t%s\n"     /*          author */
-	"\t%s %s\n"  /* A-date + M-date */
-	"\t%s\n"     /*  rfc2822 A-date */
+	"\t%s\n"     /* rfc-2822 A-date */
+	"\t%s\n"     /* rfc-2822 M-date */
 };
 
 /* build cache populates `struct md` recipe entries with everything
@@ -94,17 +98,17 @@ parse_cache(struct cache *c)
 			entry->title,
 			tags,
 			entry->author,
-			entry->adate, entry->mdate,
-			entry->published);
-		/* a cache entry has 8 assignments */
-		if (8 != assigns) {
+			entry->adate,
+			entry->mdate);
+		/* a cache entry has 7 assignments */
+		if (7 != assigns) {
 			if (EOF == assigns) {
 				if (ferror(c->file)) die("failed to read cache.");
 			} else {
 				fprintf(stderr,
 					"corrupted cache file (%s). "
 					"missing %d variables in entry number %lu.\n",
-					c->filename, 8 - assigns, c->count + 1);
+					c->filename, 7 - assigns, c->count + 1);
 				exit(EXIT_FAILURE);
 			}
 			break;  /* file finished */
@@ -188,12 +192,12 @@ dump_cache(struct cache *c)
 			entry->title,
 			tags,
 			entry->author,
-			entry->adate, entry->mdate,
-			entry->published);
+			entry->adate,
+			entry->mdate);
 	}
 
 	fclose(c->file);
 	free(c->entries);
 }
 
-
+#endif  /* GIT_INTEGRATION */

@@ -4,7 +4,12 @@
 
 #include <stdlib.h>
 #include <stdio.h>
+
+#ifndef __USE_XOPEN
+#define __USE_XOPEN
+#endif
 #include <time.h>
+
 #include <mkdio.h>
 #include "config.h"
 
@@ -13,12 +18,11 @@ struct md {
 	char tags[TAG_COUNT][TAG_NAME_LEN];
 	char slug[SLUG_LEN];
 	char *html;          /* article content, must be freed! */
-#ifdef GIT_INTEGRATION
-	time_t mtime;        /*   source file last modifed time */
-	char author[32];     /*      first commit git user.name */
-	char adate[32];      /* --diff-filter=A    (added date) */
-	char mdate[32];      /* --diff-filter=M (modified date) */
-	char published[32];  /*          rfc2822 date published */
+#if GIT_INTEGRATION
+	time_t mtime;        /* source file last modifed time */
+	char author[32];     /*    first commit git user.name */
+	char adate[32];      /*    --diff-filter=A (rfc-2822) */
+	char mdate[32];      /*    --diff-filter=M (rfc-2822) */
 #endif
 };
 
@@ -30,9 +34,13 @@ struct md {
 extern struct md _parsed_md;
 extern MMIOT *_mmio;
 
+/* add `MKD_NOPANTS` to disable 'smartypants'?
+ * (e.g. 1/4 -> ¼, "it's" -> "it’s", &c.).
+ * i'm not sure about other non-standard markdown feautures.
+ */
 static const int mkd_flags = 0
-	| MKD_NOPANTS       | MKD_STRICT   | MKD_NOTABLES
-	| MKD_NOSUPERSCRIPT | MKD_AUTOLINK | MKD_FENCEDCODE
+	| MKD_STRICT   | MKD_NOTABLES | MKD_NOSUPERSCRIPT
+	| MKD_AUTOLINK | MKD_FENCEDCODE
 	;
 
 struct md *mdparse(char *, char *);

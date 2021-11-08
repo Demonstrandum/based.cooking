@@ -2,15 +2,16 @@
 #ifndef _CONFIG_H
 #define _CONFIG_H
 /* enabling Git integration (recipe author, date posted, date edited, &c.)
- * adds about 5 seconds to build time (not cached), compared to a nearly
+ * adds about 6 seconds to build time (not cached), compared to a nearly
  * instant build time without it.
  */
 #define GIT_INTEGRATION 1
+static const char FMT_RFC2822[] = "%a, %d %b %Y %T %z";
 /* general formatting variables, all html is contained here */
 static const char PAGE_TITLE[] = "Based Cooking";
 static const char GIT_PATH[] = "/usr/bin/git";
 static const char PAGE_DATE_FORMAT[] = "%F";
-static const char PAGE_URL_ROOT[] = "https://based.cooking/";
+static const char PAGE_URL_ROOT[] = "https://based.cooking";
 static const char INDEX_MARKDOWN[]    = "./index.md";
 static const char ARTICLES_MARKDOWN[] = "./src";
 static const char ARTICLES_HTML[]     = "./blog";
@@ -21,7 +22,7 @@ static const char DESCRIPTION[] = {
 	"Only Based cooking. "
 	"No ads, no tracking, nothing but based cooking."
 };
-static const char CATEGORY[] = "Cooking";
+static const char CATEGORY[] = "cooking";
 static const char FAVICON[] = {
 	"data:image/svg+xml,"
 	"<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22>"
@@ -113,6 +114,9 @@ static const char FMT_HTML_FOOTER[] = {
 
 /* general constants & macros */
 #define _POSIX_C_SOURCE 200809L
+#define _XOPEN_SOURCE
+#define __USE_XOPEN
+#define _GNU_SOURCE
 
 #define PATH_LEN 256
 #define SLUG_LEN 128

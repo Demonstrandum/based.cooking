@@ -19,7 +19,9 @@
 /* writing rss + atom files */
 #include "rss.h"
 /* caching */
+#if GIT_INTEGRATION
 #include "cache.h"
+#endif
 
 #include "based.h"
 
@@ -150,7 +152,7 @@ write_index(char *dst, struct taglist *tag, struct recipelist *recipe)
 /* recipes display author information as well as upload + edit times.
  * this is achieved by checking the git commit history for the file.
  */
-static char date_format[50] = "--date=%F";
+static char date_format[50] = "--date=rfc";
 static char date_formatter[] = "--pretty=format:%ad";
 static char name_formatter[] = "--pretty=format:%an";
 static char *git_env[] = { "GIT_PAGER=cat", "PAGER=cat", (char *)0 };
@@ -201,7 +203,11 @@ write_recipe(FILE *f, char *srcdir, struct md *recipe, bool modified)
 	char (*tag)[TAG_NAME_LEN];
 	char title[TITLE_LEN + sizeof(PAGE_TITLE) + 10] = { 0 };
 #if GIT_INTEGRATION
+	char adate[16] = { 0 };
+	char mdate[16] = { 0 };
 	char src[PATH_LEN];
+#else
+	(void)srcdir; (void)modified;
 #endif
 
 	sprintf(title, "%s – %s", recipe->title, PAGE_TITLE);
@@ -219,7 +225,7 @@ write_recipe(FILE *f, char *srcdir, struct md *recipe, bool modified)
 #if GIT_INTEGRATION
 	/* call git for author name, date posted & date edited */
 	sprintf(src, "%s/%s.md", srcdir, recipe->slug);
-	sprintf(date_format, "--date=format:%s", PAGE_DATE_FORMAT);
+	sprintf(date_format, "--date=format:%s", FMT_RFC2822);
 	if (recipe->adate[0] == '\0')
 		git_command(recipe->adate,  32, src, date_formatter, git_log_added);
 	if (modified)
@@ -228,12 +234,11 @@ write_recipe(FILE *f, char *srcdir, struct md *recipe, bool modified)
 		strcpy(recipe->mdate, recipe->adate);
 	if (recipe->author[0] == '\0')
 		git_command(recipe->author, 32, src, name_formatter, git_log_added);
-	/* add timestamp to recipe->published */
-	sprintf(date_format, "--date=rfc");
-	if (recipe->published[0] == '\0')
-		git_command(recipe->published, 32, src, date_formatter, git_log_added);
 	/* add to footer */
-	fprintf(f, FMT_HTML_ARTICLE_FOOTER, recipe->adate, recipe->mdate, recipe->author);
+	fprintf(f, FMT_HTML_ARTICLE_FOOTER,
+		from_rfc2822(PAGE_DATE_FORMAT, adate, 16, recipe->adate),
+		from_rfc2822(PAGE_DATE_FORMAT, mdate, 16, recipe->mdate),
+		recipe->author);
 #endif
 
 	fprintf(f, FMT_HTML_FOOTER);
@@ -308,8 +313,10 @@ slugsort(const struct dirent **_a, const struct dirent **_b)
 	return cmp;
 }
 
+#if GIT_INTEGRATION
 /* cache structure (i couldn't think of any other name) */
 static struct cache hoard = { 0 };
+#endif
 
 static int
 generate(char *src, char *dst, char *cachefile)
@@ -325,9 +332,11 @@ generate(char *src, char *dst, char *cachefile)
 	char atomfile[PATH_LEN] = { '\0' };
 	/* contains html and metadata (i.e. tags) */
 	struct md *recipe;  /* parsed recipe */
+#if GIT_INTEGRATION
 	struct md *cached;  /* cahced recipe */
 	struct stat srcstat;
 	bool is_cached, modified, dst_exists;
+#endif
 	char (*tag)[TAG_NAME_LEN];
 	/* linked list of alphabetically sorted tags */
 	struct taglist *tags = NULL;
@@ -344,9 +353,13 @@ generate(char *src, char *dst, char *cachefile)
 	write_rss_init(rssf);
 	write_atom_init(atomf);
 
+#if GIT_INTEGRATION
 	/* initialise cache structure */
 	init_cache(&hoard, cachefile);
 	parse_cache(&hoard);
+#else
+	(void)cachefile;
+#endif
 
 	entries = scandir(src, &sources, NULL, slugsort);
 	if (-1 == entries)
@@ -361,6 +374,7 @@ generate(char *src, char *dst, char *cachefile)
 		sprintf(srcfile, "%s/%s.md",   src, slug);
 		sprintf(dstfile, "%s/%s.html", dst, slug);
 
+#if GIT_INTEGRATION
 		/* check cache is lined up */
 		cached = next_cache(&hoard);
 		is_cached = cached != NULL && 0 == strcmp(slug, cached->slug);
@@ -375,10 +389,13 @@ generate(char *src, char *dst, char *cachefile)
 			logprint("%s%sgenerating%s: %s -> %s\n",
 				ansi(BOLD), modified ? "re-" : "", ansi(RESET), srcfile, dstfile);
 		}
+#else
+		logprint("%sgenerating%s: %s -> %s\n",
+			ansi(BOLD), ansi(RESET), srcfile, dstfile);
+#endif
 
 		/* convert md to html */
 		recipe = mdparse(src, slug);
-		recipe->mtime = srcstat.st_mtime;
 		logprint("  ├─ title: ‘%s’\n", recipe->title);
 		logprint("  ╰── tags: ");
 		for (tag = &recipe->tags[0]; (*tag)[0] != '\0'; ++tag)
@@ -388,11 +405,16 @@ generate(char *src, char *dst, char *cachefile)
 		/* insert recipe title and url into recipe list */
 		insert_recipe(&recipes, recipe, slug);
 
+#if GIT_INTEGRATION
+		recipe->mtime = srcstat.st_mtime;
 		if (is_cached) {
 			/* fields that should never change, so are always valid */
 			strcpy(recipe->adate, cached->adate);
 			strcpy(recipe->author, cached->author);
-			strcpy(recipe->published, cached->published);
+			if (!modified) {
+				/* only valid if not modified */
+				strcpy(recipe->mdate, cached->mdate);
+			}
 		}
 		/* write recipe html file */
 		dst_exists = 0 == access(dstfile, F_OK);
@@ -414,6 +436,13 @@ generate(char *src, char *dst, char *cachefile)
 			}
 			fclose(dstf);
 		}
+#else
+		/* write recipe html file */
+		dstf = fopen(dstfile, "w");
+		if (NULL == dstf) die("error opening %s.", dstfile);
+		write_recipe(dstf, src, recipe, true);
+		fclose(dstf);
+#endif
 		/* write recipe rss fragment */
 		write_rss_entry(rssf, recipe);
 		/* write recipe atom fragment */
@@ -425,9 +454,11 @@ generate(char *src, char *dst, char *cachefile)
 
 	logprint("%sfinished%s: %lu recipes\n",
 		ansi(BOLD), ansi(RESET), recipecount);
+#if GIT_INTEGRATION
 	/* finish and dump cache */
 	dump_cache(&hoard);
 	logprint("%sfinished%s: cache rebuilt\n", ansi(BOLD), ansi(RESET));
+#endif
 	/* finish rss file */
 	write_rss_end(rssf);
 	fclose(rssf);
@@ -525,4 +556,53 @@ main(int argc, char **argv)
 		ansi(BOLD), ansi(RESET), pagecount, timetaken);
 
 	return EXIT_SUCCESS;
+}
+
+void
+die(char *fmt, ...) {
+	va_list args;
+	va_start(args, fmt);
+	vfprintf(stderr, fmt, args);
+	va_end(args);
+
+	fputc('\n', stderr);
+	if (errno) fprintf(stderr, " -> %s\n", strerror(errno));
+
+	exit(errno || EXIT_FAILURE);
+}
+
+char *
+from_rfc2822(const char *fmt, char *dst, size_t n, const char *src)
+{
+	struct tm tm = { 0 };
+	strptime(src, FMT_RFC2822, &tm);
+	strftime(dst, n, fmt, &tm);
+	return dst;
+}
+
+char *
+rfc3339time(char *dst, struct tm *tm)
+{
+	char tz[6] = { 0 };
+	size_t n;
+
+	n = strftime(dst, 26, "%Y-%m-%dT%H:%M:%S", tm);
+	if (tm->tm_gmtoff == 0) sprintf(dst + n, "Z");
+	else {
+		/* add colon to timezone hh:mm */
+		strftime(tz, 6, "%z", tm);
+		sprintf(dst + n, "%c%c%c:%c%c",
+			/* ± */ tz[0],
+			/* h */ tz[1], /* h */ tz[2],
+			/* m */ tz[3], /* m */ tz[4]);
+	}
+	return dst;
+}
+
+char *
+to_rfc3339(char *dst, const char *src, const char *fmt)
+{
+	struct tm tm = { 0 };
+	strptime(src, fmt, &tm);
+	return rfc3339time(dst, &tm);
 }
