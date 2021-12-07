@@ -197,11 +197,126 @@ git_command(char *output, ssize_t size, char *src, char *formatter, char *argume
 }
 #endif
 
+const char h2_ingredients[]  = "<h2>Ingredients</h2>";
+const char h2_contribution[] = "<h2>Contrib";
+
+
+/* allocates memory, must be freed,
+ * or returns NULL when syntax is not used.
+ * expands {metric,imperial} untis syntax in text
+ * between "## Ingredients" and "## Contribution" sections.
+ */
+static char *
+expand_units(char *html)
+{
+	char *expanded, *metric, *imperial;
+	size_t ioff, moff;  /* imperial and metric pointer offset */
+	size_t i;
+	bool uses_syntax;
+	size_t htmlsize;
+	/* pointers to end of header and start of footer */
+	char *header, *footer;
+
+	htmlsize = strlen(html);
+	metric = calloc(htmlsize, 1);
+	imperial = calloc(htmlsize, 1);
+	if (metric == NULL || imperial == NULL) {
+		logprint("could not allocate memory for recipe.\n");
+		exit(1);
+	}
+	uses_syntax = false;
+	header = footer = NULL;
+
+	i = ioff = moff = 0;
+	while ('\0' != html[i]) {
+		if (NULL == header) {
+			if (0 == strncmp(html + i, h2_ingredients, strlen(h2_ingredients))) {
+				/* found ingredients header (<h2>) */
+				i += strlen(h2_ingredients);
+				header = html + i;
+				continue;
+			}
+		} else if (NULL == footer) {
+			if (0 == strncmp(html + i, h2_contribution, strlen(h2_contribution))) {
+				/* found contribution footer (<h2>) */
+				footer = html + i;
+				i += strlen(h2_contribution);
+				continue;
+			}
+			/* scan for special units syntax, */
+			/* since header is not null, but footer is */
+			assert(header != NULL && footer == NULL);
+			/* parse line by line */
+			while ('\n' != html[i] && '\0' != html[i]) {
+				if ('{' == html[i]) {
+					uses_syntax = true;
+					/* parse syntax */
+					assert('{' == html[i++]);  /* discard '{' */
+					while (',' != html[i]) metric[moff++] = html[i++];
+					assert(',' == html[i++]);  /* discard ',' */
+					while ('}' != html[i]) imperial[ioff++] = html[i++];
+					assert('}' == html[i++]);  /* discard '}' */
+					continue;
+				}
+				/* otherwise, write to imperial and metric equally */
+				imperial[ioff++] = metric[moff++] = html[i++];
+			}
+			imperial[ioff++] = metric[moff++] = html[i++];
+			continue;
+		}
+		/* skip to next line */
+		while ('\n' != html[i++]);
+	}
+	/* if we have no footer (contribution section),
+	 * then set the footer pointer to the end of the html */
+	if (NULL == footer) footer = html + i;
+
+	expanded = NULL;  /* write to `expanded` if appropriate */
+	if (header == NULL || footer == NULL) {
+		logprint("%swarning%s: recipe missing important sections.\n",
+			ansi(BOLD), ansi(RESET));
+		if (header == NULL) logprint("- missing ingredients section.\n");
+		if (footer == NULL) logprint("- missing contribution section.\n");
+	} else if (uses_syntax) {
+		/* write metric and imperial sections to `expanded` */
+		assert(header != NULL && footer != NULL);
+		expanded = calloc(htmlsize * 2, 1);
+		if (NULL == expanded) {
+			logprint("could not allocate memory for recipe.\n");
+			exit(1);
+		}
+		i = 0;  /* offset in `expanded` */
+		/* copy header */
+		strncpy(expanded + i, html, header - html);
+		i += header - html;
+		/* open metric details submenu and add content */
+		i += sprintf(expanded + i,
+			"<details class=\"units\" id=\"metric\">"
+			"<summary>Metric Units</summary>\n");
+		i += sprintf(expanded + i, "%s\n", metric);
+		i += sprintf(expanded + i, "</details>\n");
+		/* open imperial details tag and copy content */
+		i += sprintf(expanded + i,
+			"<details class=\"units\" id=\"imperial\" open>"
+			"<summary>US Customary Units</summary>\n");
+		i += sprintf(expanded + i, "%s\n", imperial);
+		i += sprintf(expanded + i, "</details>\n");
+		/* copy in footer */
+		i += sprintf(expanded + i, "%s", footer);
+		expanded[i] = '\0';
+	}
+
+	free(metric);
+	free(imperial);
+	return expanded;
+}
+
 static int
 write_recipe(FILE *f, char *srcdir, struct md *recipe, bool modified)
 {
 	char (*tag)[TAG_NAME_LEN];
 	char title[TITLE_LEN + sizeof(PAGE_TITLE) + 10] = { 0 };
+	char *recipehtml;
 #if GIT_INTEGRATION
 	char adate[16] = { 0 };
 	char mdate[16] = { 0 };
@@ -214,7 +329,15 @@ write_recipe(FILE *f, char *srcdir, struct md *recipe, bool modified)
 	fprintf(f, FMT_HTML_HEAD, title, DESCRIPTION, FAVICON);
 	fprintf(f, "<body>\n");
 	fprintf(f, FMT_HTML_ARTICLE_HEADER);
-	fprintf(f, "%s", recipe->html);
+	/* expand {metric,imperial} syntax into two sections */
+	recipehtml = expand_units(recipe->html);
+	if (NULL != recipehtml) {
+		fprintf(f, "%s", recipehtml);
+		free(recipehtml);
+	} else {
+		fprintf(f, "%s", recipe->html);
+	}
+
 	fprintf(f, FMT_HTML_ARTICLE_END);
 	/* loop over recipe tags */
 	for (tag = &recipe->tags[0]; (*tag)[0] != '\0'; ++tag) {

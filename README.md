@@ -29,6 +29,33 @@ There are no ads, trackers, cookies (unless recipes thereof) or javascript.
 
 **If you fail to do these things, I will close your submission and you will have to resubmit. I am tired of having to fix more than 50% of submissions.**
 
+### Units
+
+If your recipe requires use of specific units, ideally you should provide
+both imperial (US customary) and metric units.  This may be accomplished
+with a syntax facility, where the quantity is first written in metric, then
+in imperial units: `{metric,imperial}`.
+Example: [src/apple-pie.md](src/apple-pie.md) ([based.cooking/apple-pie.html](https://based.cooking/apple-pie.html)).
+
+Units for quantities in each system should be chosen thoughtfully.
+Imperial units favour volume measurements, whereas metric favours
+the measure of mass for solid ingredients. 50 grams of sugar is
+most appropriately converted to 1/4 cup of sugar.  However, such a
+conversion is non-trivial, as it requires knowledge of the average density
+of sugar.  There are myriad online tools for aid in the conversion between
+the mass and volume of common ingredients.
+
+A rule of thumb is: grams for solids, and deciliters for liquids in metric;
+cups, tablespoons, teaspoons and sometimes pounds and ounces (where appropriate)
+in imperial measurements.
+
+If the recipe does not convert nicely, try scaling the recipe up or down
+for nicer quantities. Make sure to indicate this, e.g.: `Produces {8,12} cookies.`
+
+Favour less text and avoid duplicating text when specifying quantities for each
+system.  A contrived example of this would be:
+`{180°C,350°F}`, is the same as `{180,350}°{C,F}`.
+
 ### Tags
 
 You can (and should) add tags at the end of your recipe. The syntax is:

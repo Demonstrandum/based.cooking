@@ -6,6 +6,7 @@ ARTICLES_MARKDOWN ?= ./src
 CACHE_FILE ?= ./.buildcache
 
 PUBLIC ?= ./data
+REMOTE ?= ./test_deploy
 
 # C compilation
 CC ?= cc

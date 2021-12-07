@@ -47,6 +47,12 @@ img[alt="XMR Logo"] {
 	display: inline ;
 }
 
+details.units > summary {
+	padding: 8px 16px;
+	margin-bottom: 5px;
+	border: 1px solid #555;
+}
+
 @media (prefers-color-scheme: light) {
 	body {
 		background: white ;
