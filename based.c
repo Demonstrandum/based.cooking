@@ -11,6 +11,7 @@
 #include <time.h>
 #include <errno.h>
 #include <locale.h>
+#include <iconv.h>
 #include <assert.h>
 /* looping through directories */
 #include <dirent.h>
@@ -62,6 +63,22 @@ logprint(char *fmt, ...)
 	return err;
 }
 
+/* returns an alphabetic character to which the string belongs */
+static char
+alphord(char *str)
+{
+	char out[2] = { 0 };
+	char *ptr = out;
+	size_t inlen = strlen(str), outlen = 1;
+	iconv_t cd;
+
+	cd = iconv_open("ASCII//TRANSLIT", "UTF-8");
+	iconv(cd, &str, &inlen, &ptr, &outlen);
+	iconv_close(cd);
+
+	return out[0];
+}
+
 /* contiguous array of recipes in no order */
 static struct recipelist recipemem[MAX_RECIPES] = { 0 };
 static size_t recipecount = 0;
@@ -111,17 +128,137 @@ next_tag:;
 	}
 }
 
+static unsigned  /* ceil division */
+atleast(unsigned n, unsigned d) { return n / d + (n % d != 0); }
+
+struct letter_on_page {
+	char letter;
+	unsigned page;
+};
+
+/* pages for paginator */
+static int
+write_pages(char *dst, struct recipelist *recipe)
+{
+	FILE *pagef;
+	char pagefile[PATH_LEN];
+	struct recipelist *first, *last;  /* recipe before current recipe */
+	unsigned page, pages, count, lettercount;
+	bool open = false;
+	struct letter_on_page *letterpages, *letterpage;
+
+	first = last = recipe;
+	pages = atleast(recipecount, RECIPES_PER_PAGE);
+
+	/* initial indexing of recipes according to alphabet */
+	lettercount = 0;
+	letterpages = calloc(30, sizeof(struct letter_on_page));
+	letterpages[lettercount++] =
+		(struct letter_on_page){ alphord(recipe->title), 1 };
+	for (page = 1; page <= pages; ++page) {
+		for (count = 0; count < RECIPES_PER_PAGE && recipe != NULL;
+				last = recipe, recipe = recipe->next, ++count) {
+			if (alphord(last->title) == alphord(recipe->title))
+				continue;
+			letterpages[lettercount++] =
+				(struct letter_on_page){ alphord(recipe->title), page };
+		}
+	}
+
+	last = recipe = first;
+	for (page = 1; page <= pages; ++page) {
+		sprintf(pagefile, "%s/"FMT_PAGE_FILE, dst, page);
+		pagef = fopen(pagefile, "w");
+		if (NULL == pagef) die("failed to open page %u for writing.", page);
+		/* each page needs full valid HTML */
+		fprintf(pagef, FMT_HTML_HEAD, PAGE_TITLE, DESCRIPTION, FAVICON);
+		fprintf(pagef, FMT_HTML_PAGINATE_HEAD);
+		fprintf(pagef, "</head>\n<body>\n");
+
+		/* write paginator alphabet bar */
+		fprintf(pagef, FMT_HTML_PAGINATE_BAR_START);
+		if (page != 1)
+			fprintf(pagef, "<span>");
+		for (count = 0, letterpage = letterpages;
+			 count < lettercount;
+			 ++count, ++letterpage) {
+			/* grey-out 'active' letters for page */
+			if (letterpage->page == page && !open) {
+				open = true;
+				if (page != 1)
+					fprintf(pagef, "</span>");
+				fprintf(pagef, "<span id=\"active\">");
+			}
+			if (letterpage->page != page && open) {
+				open = false;
+				fprintf(pagef, "</span>");
+				fprintf(pagef, "<span>");
+			}
+			fprintf(pagef, FMT_HTML_PAGINATE_BAR_LINK,
+			        letterpage->page, letterpage->letter);
+		}
+		fprintf(pagef, "</span>");
+		fprintf(pagef, FMT_HTML_PAGINATE_BAR_END);
+
+		/* write recipe list entries with alphabet headers */
+		fprintf(pagef, FMT_HTML_PAGINATE_LIST_START);
+		fprintf(pagef, FMT_HTML_PAGINATE_HEADER, alphord(recipe->title));
+		for (count = 0; count < RECIPES_PER_PAGE && recipe != NULL;
+				last = recipe, recipe = recipe->next, ++count) {
+			/* if first character of recipe title advanced in the alphabet,
+			 * then print a new alphabetical heading */
+			if (alphord(recipe->title) != alphord(last->title)) {
+				fprintf(pagef, FMT_HTML_PAGINATE_HEADER, alphord(recipe->title));
+			}
+			fprintf(pagef, FMT_HTML_INDEX_LIST_ENTRY, recipe->url, recipe->title);
+		}
+
+		fprintf(pagef, FMT_HTML_PAGINATE_LIST_END);
+		/* write page navigation controls */
+		fprintf(pagef, "<nav>\n");
+		/* write page links */
+		fprintf(pagef, FMT_HTML_PAGINATE_PAGE_LINKS_START);
+		for (count = 1; count <= pages; ++count)
+			if (count != page)
+				fprintf(pagef, FMT_HTML_PAGINATE_PAGE_LINK, count, count);
+		fprintf(pagef, FMT_HTML_PAGINATE_PAGE_LINKS_END);
+		/* write appropriate paginator buttons */
+		fprintf(pagef, FMT_HTML_PAGINATE_BUTTONS_START);
+		if (page != 1) {  /* no back button on first page */
+			fprintf(pagef, FMT_HTML_PAGINATE_FIRST_BUTTON, 1);
+			fprintf(pagef, FMT_HTML_PAGINATE_BACK_BUTTON, page - 1);
+		}
+		fprintf(pagef, FMT_HTML_PAGINATE_CURRENT_PAGE, page, page);
+		if (page != pages) { /* no next button on last page */
+			fprintf(pagef, FMT_HTML_PAGINATE_NEXT_BUTTON, page + 1);
+			fprintf(pagef, FMT_HTML_PAGINATE_LAST_BUTTON, pages);
+		}
+		fprintf(pagef, FMT_HTML_PAGINATE_BUTTONS_END);
+		fprintf(pagef, "</nav>\n");
+		/* page finished */
+		fprintf(pagef, "</body>\n</html>\n");
+		fclose(pagef);
+	}
+
+	return EXIT_SUCCESS;
+}
+
 static int
 write_index(char *dst, struct taglist *tag, struct recipelist *recipe)
 {
 	FILE *f, *mdf;  /* index.html file, index.md file. */
 	MMIOT *mmio;
+	int res;
 	char indexfile[PATH_LEN];
 	sprintf(indexfile, "%s/index.html", dst);
 
+	/* first write paginator pages */
+	res = write_pages(dst, recipe);
+	if (res != EXIT_SUCCESS) return res;
+
 	f = fopen(indexfile, "w");
 	fprintf(f, FMT_HTML_HEAD, PAGE_TITLE, DESCRIPTION, FAVICON);
-	fprintf(f, "<body>\n");
+	fprintf(f, "</head>\n<body>\n");
 	fprintf(f, FMT_HTML_BANNER, PAGE_TITLE);
 	fprintf(f, FMT_HTML_INDEX_HEADER, DESCRIPTION);
 	/* loop through tags */
@@ -129,11 +266,8 @@ write_index(char *dst, struct taglist *tag, struct recipelist *recipe)
 		fprintf(f, FMT_HTML_TAG_ENTRY, tag->name, tag->name);
 		if (tag->next != NULL) fprintf(f, FMT_HTML_TAG_SEP);
 	}
-	fprintf(f, FMT_HTML_INDEX_LIST_START);
-	/* loop through recipes */
-	for (; recipe != NULL; recipe = recipe->next)
-		fprintf(f, FMT_HTML_INDEX_LIST_ENTRY, recipe->url, recipe->title);
-	fprintf(f, FMT_HTML_INDEX_LIST_END);
+	/* embed iframe to paginator */
+	fprintf(f, FMT_HTML_INDEX_PAGINATOR, 1);
 	/* parse and insert index.md file */
 	mdf = fopen(INDEX_MARKDOWN, "r");
 	mmio = mkd_in(mdf, mkd_flags);
@@ -183,7 +317,7 @@ git_command(char *output, ssize_t size, char *src, char *formatter, char *argume
 		dup2(link[1], fileno(stdout));
 		close(link[0]); close(link[1]);
 		execve(GIT_PATH, arguments, git_env);
-		logprint("git command failed\n");
+		fprintf(stderr, "error: git command failed\n");
 		exit(1);
 	} else if (pid > 0) {
 		close(link[1]);
@@ -191,7 +325,7 @@ git_command(char *output, ssize_t size, char *src, char *formatter, char *argume
 		close(link[0]);
 		wait(NULL);
 	} else {
-		logprint("fork() failed\n");
+		fprintf(stderr, "error: fork() failed\n");
 		exit(1);
 	}
 }
@@ -220,10 +354,8 @@ expand_units(char *html)
 	htmlsize = strlen(html);
 	metric = calloc(htmlsize, 1);
 	imperial = calloc(htmlsize, 1);
-	if (metric == NULL || imperial == NULL) {
-		logprint("could not allocate memory for recipe.\n");
-		exit(1);
-	}
+	if (metric == NULL || imperial == NULL)
+		die("could not allocate memory for recipe.");
 	uses_syntax = false;
 	header = footer = NULL;
 
@@ -273,18 +405,16 @@ expand_units(char *html)
 
 	expanded = NULL;  /* write to `expanded` if appropriate */
 	if (header == NULL || footer == NULL) {
-		logprint("%swarning%s: recipe missing important sections.\n",
+		fprintf(stderr, "%swarning%s: recipe missing important sections.\n",
 			ansi(BOLD), ansi(RESET));
-		if (header == NULL) logprint("- missing ingredients section.\n");
-		if (footer == NULL) logprint("- missing contribution section.\n");
+		if (header == NULL) fprintf(stderr, " · missing ingredients section.\n");
+		if (footer == NULL) fprintf(stderr, " · missing contribution section.\n");
 	} else if (uses_syntax) {
 		/* write metric and imperial sections to `expanded` */
 		assert(header != NULL && footer != NULL);
 		expanded = calloc(htmlsize * 2, 1);
-		if (NULL == expanded) {
-			logprint("could not allocate memory for recipe.\n");
-			exit(1);
-		}
+		if (NULL == expanded)
+			die("could not allocate memory for recipe.");
 		i = 0;  /* offset in `expanded` */
 		/* copy header */
 		strncpy(expanded + i, html, header - html);
@@ -327,7 +457,7 @@ write_recipe(FILE *f, char *srcdir, struct md *recipe, bool modified)
 
 	sprintf(title, "%s – %s", recipe->title, PAGE_TITLE);
 	fprintf(f, FMT_HTML_HEAD, title, DESCRIPTION, FAVICON);
-	fprintf(f, "<body>\n");
+	fprintf(f, "</head>\n<body>\n");
 	fprintf(f, FMT_HTML_ARTICLE_HEADER);
 	/* expand {metric,imperial} syntax into two sections */
 	recipehtml = expand_units(recipe->html);
@@ -386,7 +516,7 @@ write_tagfiles(char *dst, struct taglist *tags, struct recipelist *recipes)
 		sprintf(tagfile, "%s/@%s.html", dst, tag->name);
 		f = fopen(tagfile, "w");
 		fprintf(f, FMT_HTML_HEAD, title, DESCRIPTION, FAVICON);
-		fprintf(f, "<body>\n");
+		fprintf(f, "</head>\n<body>\n");
 		fprintf(f, FMT_HTML_BANNER, PAGE_TITLE);
 		fprintf(f, FMT_HTML_TAG_HEADER, tag->name);
 		fprintf(f, FMT_HTML_INDEX_LIST_START);
@@ -664,6 +794,7 @@ main(int argc, char **argv)
 	 * i.e "Älplermagronen" ends up last, despite starting with 'Ä'.
 	 */
 	setlocale(LC_COLLATE, "en_US.UTF-8");
+	setlocale(LC_ALL, "en_US.UTF-8");  /*< for iconv to transliterate */
 
 	/* start clock on generate() function */
 	clock_gettime(CLOCK_MONOTONIC, &tic);

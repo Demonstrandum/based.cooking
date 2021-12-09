@@ -48,9 +48,18 @@ img[alt="XMR Logo"] {
 }
 
 details.units > summary {
-	padding: 8px 16px;
-	margin-bottom: 5px;
-	border: 1px solid #555;
+	cursor: pointer ;
+	user-select: none ;
+	padding: 8px 16px ;
+	margin-bottom: 5px ;
+	border: 1px solid #555 ;
+}
+
+#paginator {
+	border: none ;
+	width: 100% ;
+	/* height must be adjusted when more recipes are displayed per page */
+	height: 53em ;
 }
 
 @media (prefers-color-scheme: light) {
@@ -79,10 +88,3 @@ details.units > summary {
 	}
 }
 
-@media (min-width: 55em) {
-	#artlist { column-count: 2 ;}
-}
-
-@media (min-width: 100em) {
-	#artlist { column-count: 3 ;}
-}
