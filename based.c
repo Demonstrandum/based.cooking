@@ -240,6 +240,7 @@ write_pages(char *dst, struct recipelist *recipe)
 		fclose(pagef);
 	}
 
+	free(letterpages);
 	return EXIT_SUCCESS;
 }
 
