@@ -62,6 +62,14 @@ details.units > summary {
 	height: 53em ;
 }
 
+@media (min-width: 25em) {
+	#artlist { column-count: 2 ; }
+}
+
+@media (min-width: 55em) {
+	#artlist { column-count: 3 ; }
+}
+
 @media (prefers-color-scheme: light) {
 	body {
 		background: white ;

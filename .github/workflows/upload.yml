@@ -18,16 +18,45 @@ jobs:
 
     # Steps represent a sequence of tasks that will be executed as part of the job
     steps:
-    - name: Updating website.
-      uses: appleboy/ssh-action@master
+    - uses: actions/checkout@v2
+    - name: Build page
+      run: |
+        sudo apt-get update -y
+        sudo apt-get install -y libmarkdown2-dev build-essential
+        REMOTE=./deploy make deploy
+    - uses: actions/upload-artifact@v1
       with:
-        host: based.cooking
-        username: based
-        key: ${{ secrets.based_ssh }}
-        passphrase: ${{ secrets.based_ssh_pass }}
-        port: ${{ secrets.based_port }}
-        script: |
-          cd repo
-          git stash
-          git pull --force origin master
-          make deploy
+        name: Deployment
+        path: ./deploy
+    - name: Commit preview to gh-pages
+      run: |
+        git clone "$GITHUB_SERVER_URL/$GITHUB_REPOSITORY" --branch gh-pages --single-branch gh-pages
+        cp -r ./deploy/* ./gh-pages
+        touch gh-pages/.nojekyll
+        cd gh-pages
+        git config --local user.email "action@github.com"
+        git config --local user.name "GitHub Action"
+        git add -A
+        git commit -m "Master branch page preview" -a || true
+        # The above command will fail if no changes were present, so we ignore.
+    - name: Push changes
+      uses: ad-m/github-push-action@master
+      with:
+        branch: gh-pages
+        directory: gh-pages
+        github_token: ${{ secrets.GITHUB_TOKEN }}
+
+    # Reenable this later on.
+    #- name: Updating website.
+    #  uses: appleboy/ssh-action@master
+    #  with:
+    #    host: based.cooking
+    #    username: based
+    #    key: ${{ secrets.based_ssh }}
+    #    passphrase: ${{ secrets.based_ssh_pass }}
+    #    port: ${{ secrets.based_port }}
+    #    script: |
+    #      cd repo
+    #      git stash
+    #      git pull --force origin master
+    #      make deploy

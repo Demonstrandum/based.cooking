@@ -6,3 +6,6 @@ test_*
 *.o
 bin/
 .buildcache
+
+# in dev
+fastcgi/

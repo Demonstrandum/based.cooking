@@ -3,10 +3,72 @@ on: pull_request
 jobs:
   check_files:
     runs-on: ubuntu-latest
+    env:
+      PAGE_URL: "https://demonstrandum.github.io/based.cooking"
     steps:
       - uses: actions/checkout@v2
         with:
           fetch-depth: 0
+      - name: Set up env
+        run: |
+          PULLNUM=$(jq --raw-output .pull_request.number "$GITHUB_EVENT_PATH")
+          echo "PULLNUM=$PULLNUM" >> $GITHUB_ENV
       - name: Check files for compliance
-        run: .github/workflows/scripts/check-files.sh
+        run: |
+          PR_FAIL=""
+          if .github/workflows/scripts/check-files.sh > errors.txt; then
+            rm errors.txt  # delete empty file if no errors
+          else
+            PR_FAIL="
+              Your pull-request failed some basic checks:
+
+              \`\`\`
+              $(cat errors.txt)
+              \`\`\`
+            "
+          fi
+
+          echo "PR_FAIL=$PR_FAIL" >> $GITHUB_ENV
+      - name: Build PR preview
+        run: |
+          [ -f errors.txt ] && exit 0
+
+          sudo apt-get update -y
+          sudo apt-get install -y libmarkdown2-dev build-essential
+          REMOTE="./pull-request-$PULLNUM" make deploy
+      - uses: actions/upload-artifact@v1
+        with:
+          name: PrPreview
+          path: ./pull-request-${{ env.PULLNUM }}
+      - name: Commit pr preview to gh-pages
+        run: |
+          [ -f errors.txt ] && exit 0
+
+          git clone "$GITHUB_SERVER_URL/$GITHUB_REPOSITORY" --branch gh-pages --single-branch gh-pages
+          cp -r ./pull-request-$PULLNUM ./gh-pages/pull-request-$PULLNUM
+          touch gh-pages/.nojekyll
+          cd gh-pages
+          git config --local user.email "action@github.com"
+          git config --local user.name "GitHub Action"
+          git add -A
+          git commit -m "Upload pull-request preview" -a || true
+
+          PR_PREVIEW="A preview of this pull request is available here: \
+                      [Preview for pull request \#$PULLNUM]($PAGE_URL/pull-request-$PULLNUM/index.html)."
+          echo "PR_PREVIEW=$PR_PREVIEW" >> $GITHUB_ENV
+      - name: Push changes
+        uses: ad-m/github-push-action@master
+        with:
+          branch: gh-pages
+          directory: gh-pages
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+      - name: Comment on PR.
+        uses: unsplash/comment-on-pr@v1.3.0
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          msg: "${{ env.PR_FAILED }}${{ env.PR_PREVIEW }}"
+
+
+
 
