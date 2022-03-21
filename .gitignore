@@ -1,0 +1,11 @@
+rss.xml
+atom.xml
+blog
+tags
+test_*
+*.o
+bin/
+.buildcache
+
+# in dev
+fastcgi/
