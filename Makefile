@@ -11,6 +11,7 @@ REMOTE ?= ./test_deploy
 # C compilation
 CC ?= cc
 CLINKS ?= -lmarkdown
+CGILINKS ?= -lfcgi
 CFLAGS += -Os -std=c99 -Wall -Wpedantic -Wextra
 CFILES := $(wildcard *.c)
 OUT ?= ./bin
@@ -18,7 +19,7 @@ BINARY ?= based
 CTARGET ?= $(OUT)/$(BINARY)
 OBJS := $(patsubst %.c,$(OUT)/%.o,$(CFILES))
 
-.PHONY: help init compile build deploy clean
+.PHONY: help init compile build deploy cgi clean
 
 help:
 	$(info make init|build|deploy|clean)
@@ -47,6 +48,9 @@ build: compile $(ARTICLES_HTML)
 
 deploy: build
 	rsync -rLtz $(BLOG_RSYNC_OPTS) $(ARTICLES_HTML)/ $(PUBLIC)/ $(REMOTE)
+
+cgi: fastcgi/searchcgi.c
+	$(CC) $(CFLAGS) fastcgi/searchcgi.c -o fastcgi/search.fcgi $(CLINKS)
 
 clean:
 	rm -rf $(ARTICLES_HTML)/* $(OUT)

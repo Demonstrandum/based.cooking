@@ -52,11 +52,3 @@ body {
 #pagebuttons {
 	float: right ;
 }
-
-@media (min-width: 25em) {
-	#artlist { column-count: 2 ; }
-}
-
-@media (min-width: 55em) {
-	#artlist { column-count: 3 ; }
-}
