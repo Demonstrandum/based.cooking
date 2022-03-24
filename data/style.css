@@ -59,15 +59,16 @@ details.units > summary {
 	border: none ;
 	width: 100% ;
 	/* height must be adjusted when more recipes are displayed per page */
-	height: 53em ;
+	height: 48rem ;
 }
 
-@media (min-width: 25em) {
-	#artlist { column-count: 2 ; }
+#artlist {
+	column-count: 2 ;
 }
 
-@media (min-width: 55em) {
-	#artlist { column-count: 3 ; }
+@media only screen and (max-width: 544px) {
+	#artlist { column-count: 1 ; }
+	#paginator { height: 95em ; }
 }
 
 @media (prefers-color-scheme: light) {

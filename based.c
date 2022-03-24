@@ -40,14 +40,21 @@ void usage(char *prog)
 #define BOLD 1
 #define RESET 0
 
-static char _escbuf[256];
-static int  _escofs = 0;
+/* look-up table of 256 ansi escape code.
+ * each section is 7 bytes: (\x1B + [ + digit1 + digit2 + digit3 + m + NUL).
+ * shorter codes are left-aligned, right-padded with NULs.
+ * each code is intercalted by NUL bytes.
+ * needless to say, this is not thread-safe, nothing in this program is. */
+static char _escbuf[256 * 7] = { '\0' };
 static char *
 ansi(int code)
 {
-	char *esc = _escbuf + _escofs;
-	_escofs += sprintf(esc, "\x1b[%dm", code) + 1;
-	return esc;
+	char *dest;
+	if (0 > code || 255 < code) die("bad ansi esc-code: %d", code);
+	dest = _escbuf + code * 7;
+	if ('\0' == *dest)
+		sprintf(dest, "\x1b[%dm", code);
+	return dest;
 }
 
 static int verbosity = 1;
@@ -63,20 +70,27 @@ logprint(char *fmt, ...)
 	return err;
 }
 
-/* returns an alphabetic character to which the string belongs */
+/* returns the ascii alphabetic character the string starts with. */
 static char
 alphord(char *str)
 {
-	char out[2] = { 0 };
+	char out[5] = { 0 };
 	char *ptr = out;
-	size_t inlen = strlen(str), outlen = 1;
+	size_t inlen = strlen(str), outlen = 4;
 	iconv_t cd;
 
 	cd = iconv_open("ASCII//TRANSLIT", "UTF-8");
 	iconv(cd, &str, &inlen, &ptr, &outlen);
 	iconv_close(cd);
 
-	return out[0];
+	ptr = out;
+	while ((size_t)(ptr - out) < 4) {
+		/* find the first alphabetic character */
+		if ('A' <= *ptr && *ptr <= 'Z') return *ptr;
+		if ('a' <= *ptr && *ptr <= 'z') return *ptr + 'A' - 'a';
+		++ptr;
+	}
+	return out[0];  /* not alphabetic! */
 }
 
 /* contiguous array of recipes in no order */
@@ -307,6 +321,7 @@ git_command(char *output, ssize_t size, char *src, char *formatter, char *argume
 {
 	pid_t pid;
 	int link[2];
+	ssize_t eaten;
 
 	arguments[5] = date_format;
 	arguments[6] = formatter;
@@ -322,7 +337,17 @@ git_command(char *output, ssize_t size, char *src, char *formatter, char *argume
 		exit(1);
 	} else if (pid > 0) {
 		close(link[1]);
-		if (-1 == read(link[0], output, size)) die("read failed");
+		/* read output until fully consumed. */
+		eaten = -1;
+		while (eaten != 0) {
+			eaten = read(link[0], output, size);
+			if (-1 == eaten) {
+				if (EINTR == errno) continue;
+				die("read failed: %s", strerror(errno));
+			}
+			output += eaten;
+			size -= eaten;
+		}
 		close(link[0]);
 		wait(NULL);
 	} else {
@@ -398,7 +423,8 @@ expand_units(char *html)
 			continue;
 		}
 		/* skip to next line */
-		while ('\n' != html[i++]);
+		while ('\n' != html[i] && '\0' != html[i]) ++i;
+		if ('\n' == html[i]) ++i;
 	}
 	/* if we have no footer (contribution section),
 	 * then set the footer pointer to the end of the html */
@@ -485,7 +511,7 @@ write_recipe(FILE *f, char *srcdir, struct md *recipe, bool modified)
 	if (modified)
 		git_command(recipe->mdate,  32, src, date_formatter, git_log_modified);
 	if (recipe->mdate[0] == '\0')
-		strcpy(recipe->mdate, recipe->adate);
+		strncpy(recipe->mdate, recipe->adate, sizeof(recipe->mdate) - 1);
 	if (recipe->author[0] == '\0')
 		git_command(recipe->author, 32, src, name_formatter, git_log_added);
 	/* add to footer */
@@ -663,11 +689,11 @@ generate(char *src, char *dst, char *cachefile)
 		recipe->mtime = srcstat.st_mtime;
 		if (is_cached) {
 			/* fields that should never change, so are always valid */
-			strcpy(recipe->adate, cached->adate);
-			strcpy(recipe->author, cached->author);
+			strncpy(recipe->adate,  cached->adate,  sizeof(recipe->adate)  - 1);
+			strncpy(recipe->author, cached->author, sizeof(recipe->author) - 1);
 			if (!modified) {
 				/* only valid if not modified */
-				strcpy(recipe->mdate, cached->mdate);
+				strncpy(recipe->mdate, cached->mdate, sizeof(recipe->mdate) - 1);
 			}
 		}
 		/* write recipe html file */

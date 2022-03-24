@@ -15,7 +15,8 @@ ifeq ($(shell uname),Darwin)
 	CLINKS += -liconv
 endif
 CGILINKS ?= -lfcgi
-CFLAGS += -Os -std=c99 -Wall -Wpedantic -Wextra
+OPT ?= -Os
+CFLAGS += $(OPT) -std=c99 -Wall -Wpedantic -Wextra
 CFILES := $(wildcard *.c)
 OUT ?= ./bin
 BINARY ?= based
