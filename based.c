@@ -322,7 +322,7 @@ git_command(char *output, ssize_t size, char *src, char *formatter, char *argume
 		exit(1);
 	} else if (pid > 0) {
 		close(link[1]);
-		read(link[0], output, size);
+		if (-1 == read(link[0], output, size)) die("read failed");
 		close(link[0]);
 		wait(NULL);
 	} else {

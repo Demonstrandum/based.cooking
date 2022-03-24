@@ -222,9 +222,9 @@ static const char FMT_HTML_FOOTER[] = {
 /* TITLE_LEN: maximum length (bytes) for a recipe title. */
 #define TITLE_LEN 64
 /* TAG_COUNT: maximum number of tags on one recipe.
- * TAG_NAME_LEN: maximum number of characters in one recipe. */
+ * TAG_NAME_LEN: maximum number of characters in tag's name. */
 #define TAG_COUNT 10
 #define TAG_NAME_LEN 30
-/* => 10 * 30 = 300 bytes for tags */
+/* => 10 * 30 = 300 bytes (max) for tags */
 
 #endif
