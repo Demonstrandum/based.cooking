@@ -10,7 +10,10 @@ REMOTE ?= ./test_deploy
 
 # C compilation
 CC ?= cc
-CLINKS ?= -lmarkdown -liconv
+CLINKS ?= -lmarkdown
+ifeq ($(shell uname),Darwin)
+	CLINKS += -liconv
+endif
 CGILINKS ?= -lfcgi
 CFLAGS += -Os -std=c99 -Wall -Wpedantic -Wextra
 CFILES := $(wildcard *.c)
