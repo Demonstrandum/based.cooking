@@ -21,7 +21,7 @@ body {
 	text-decoration: none ;
 }
 #bar span {
-	display: inline-block ;
+	display: inline ;
 }
 #bar #active {
 	opacity: 0.4 ;
